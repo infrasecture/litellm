@@ -9361,6 +9361,12 @@ class ProviderConfigManager:
             )
 
             return NvidiaNimPassthroughConfig()
+        elif LlmProviders.CHATGPT == provider:
+            from litellm.llms.chatgpt.search.transformation import (
+                ChatGPTSearchPassthroughConfig,
+            )
+
+            return ChatGPTSearchPassthroughConfig()
         return None
 
     @staticmethod
