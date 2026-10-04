@@ -103,6 +103,7 @@ class ChatGPTResponsesAPIConfig(OpenAIResponsesAPIConfig):
             "previous_response_id",
             "truncation",
             "prompt_cache_key",
+            "text",
         }
 
         return {k: v for k, v in request.items() if k in allowed_keys}

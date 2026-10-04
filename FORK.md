@@ -4,6 +4,8 @@ This fork preserves ChatGPT Responses caller instructions verbatim, including em
 
 It also preserves `prompt_cache_key` in Responses requests and uses a nonempty string key as the upstream `session_id` header. Empty, absent or non-string keys leave the existing session header unchanged
 
+The adapter preserves the caller's complete `text` configuration, including JSON schemas, `strict`, JSON mode, explicit text format and verbosity. This also retains `response_format` after the Chat Completions bridge converts it to `text.format`. Requests without `text` remain unchanged. The allowlist correction follows the text-forwarding approach in [upstream PR #38086](https://github.com/BerriAI/litellm/pull/38086), without its separate string-input change
+
 It also carries the standalone Codex search implementation from [upstream PR #36180](https://github.com/BerriAI/litellm/pull/36180), adapted to the current provider, proxy and test layout. Both `/alpha/search` and `/v1/alpha/search` use the shared passthrough lifecycle, ChatGPT OAuth, model routing, limits and callbacks
 
 `main` carries the patches on upstream HEAD. `infrasecture_v1.105.0-rc.1` carries the same patches on upstream tag `v1.105.0-rc.1`. The upstream tag is not moved or replaced
@@ -11,5 +13,3 @@ It also carries the standalone Codex search implementation from [upstream PR #36
 GitHub Actions builds each branch from source using its locked dependencies and Dockerfile, tests the packaged proxy against a local synthetic provider with external networking disabled, then publishes native amd64 and arm64 images to `ghcr.io/infrasecture/litellm`
 
 The moving image tags are `main` and `v1.105.0-rc.1`. Every publication also has a `sha-<full Git commit>` tag and a manifest digest. Deployments should use the digest. A channel tag is advanced only after both architectures pass the packaged proxy checks
-
-The fork does not include the separate Fungophilus changes for Responses JSON schema forwarding. Those remain separate patches until adopted upstream or explicitly added here

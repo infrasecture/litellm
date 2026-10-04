@@ -18,6 +18,17 @@ from pydantic import JsonValue, TypeAdapter
 
 JSON_OBJECT: Final = TypeAdapter(dict[str, JsonValue])
 REQUESTS: Final[queue.Queue[tuple[str, dict[str, str], dict[str, JsonValue]]]] = queue.Queue()
+OUTPUT_FORMAT: Final[dict[str, JsonValue]] = {
+    "type": "json_schema",
+    "name": "answer",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "properties": {"answer": {"type": "string"}},
+        "required": ["answer"],
+        "additionalProperties": False,
+    },
+}
 
 
 class Provider(BaseHTTPRequestHandler):
@@ -122,10 +133,56 @@ def verify(port: int) -> None:
         else:
             assert upstream_body.get("prompt_cache_key") == cache_key, upstream_body
         assert upstream_headers["session_id"] == (cache_key or "fixture-fallback"), upstream_headers
+        assert "text" not in upstream_body, upstream_body
+    verify_output_formats(port)
     assert 400 <= request(port, "/v1/alpha/search", {"model": "search-model"}, "sk-wrong")[0] < 500
     assert request(port, "/v1/alpha/search", {"model": ""})[0] == 400
     assert request(port, "/v1/alpha/search", {"model": "other-provider"})[0] == 400
     assert REQUESTS.empty(), "Rejected requests reached the provider"
+
+
+def verify_output_formats(port: int) -> None:
+    text_configs: Final[tuple[dict[str, JsonValue], ...]] = (
+        {"format": OUTPUT_FORMAT, "verbosity": "low"},
+        {"format": {"type": "json_object"}},
+        {"format": {"type": "text"}, "verbosity": "high"},
+        {"verbosity": "low"},
+        {},
+    )
+    for text_config in text_configs:
+        status, _, body = request(
+            port,
+            "/v1/responses",
+            {
+                "model": "search-model",
+                "input": [{"role": "user", "content": "fixture"}],
+                "stream": True,
+                "text": text_config,
+            },
+        )
+        assert status == 200, (status, body)
+        assert b"response.completed" in body, body
+        path, _, upstream_body = REQUESTS.get(timeout=5)
+        assert path == "/backend-api/codex/responses", path
+        assert upstream_body.get("text") == text_config, upstream_body
+
+    status, _, body = request(
+        port,
+        "/v1/chat/completions",
+        {
+            "model": "search-model",
+            "messages": [{"role": "user", "content": "fixture"}],
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {key: value for key, value in OUTPUT_FORMAT.items() if key != "type"},
+            },
+        },
+    )
+    assert status == 200, (status, body)
+    assert json.loads(body)["choices"][0]["message"]["content"] == "fixture", body
+    path, _, upstream_body = REQUESTS.get(timeout=5)
+    assert path == "/backend-api/codex/responses", path
+    assert upstream_body.get("text") == {"format": OUTPUT_FORMAT}, upstream_body
 
 
 def main() -> None:
@@ -208,7 +265,8 @@ def main() -> None:
                         process.wait()
                     provider.shutdown()
     sys.stdout.write(
-        "PASS: real proxy HTTP, caller instructions, cache affinity, search routes, OAuth headers and rejected requests\n"
+        "PASS: real proxy HTTP, caller instructions, cache affinity, output formats, chat bridge, "
+        "search routes, OAuth headers and rejected requests\n"
     )
 
 
