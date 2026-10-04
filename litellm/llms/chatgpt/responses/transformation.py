@@ -29,7 +29,6 @@ from ..common_utils import (
     GetAccessTokenError,
     ensure_chatgpt_session_id,
     get_chatgpt_default_headers,
-    get_chatgpt_default_instructions,
 )
 
 if TYPE_CHECKING:
@@ -82,13 +81,6 @@ class ChatGPTResponsesAPIConfig(OpenAIResponsesAPIConfig):
             litellm_params,
             headers,
         )
-        base_instructions: Final = get_chatgpt_default_instructions()
-        existing_instructions: Final = request.get("instructions")
-        if existing_instructions:
-            if base_instructions not in existing_instructions:
-                request["instructions"] = f"{base_instructions}\n\n{existing_instructions}"
-        else:
-            request["instructions"] = base_instructions
         request["store"] = False
         request["stream"] = True
         include: Final = list(request.get("include") or [])

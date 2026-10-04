@@ -179,7 +179,25 @@ class TestChatGPTResponsesAPITransformation:
 
         assert request["stream"] is True
         assert "reasoning.encrypted_content" in request["include"]
-        assert request["instructions"].startswith("You are Codex, based on GPT-5.")
+        assert "instructions" not in request
+
+    @pytest.mark.parametrize("instructions", ["Use only the caller's instructions.\nZażółć 🍄", "", None])
+    @pytest.mark.parametrize("legacy_default", ["", "Do not inject this server prompt"])
+    def test_chatgpt_preserves_caller_instructions(
+        self, instructions: str | None, legacy_default: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("CHATGPT_DEFAULT_INSTRUCTIONS", legacy_default)
+        config: Final = ChatGPTResponsesAPIConfig()
+        request: Final = config.transform_responses_api_request(
+            model="chatgpt/test-model",
+            input="hi",
+            response_api_optional_request_params={"instructions": instructions},
+            litellm_params=GenericLiteLLMParams(),
+            headers={},
+        )
+
+        assert "instructions" in request
+        assert request["instructions"] == instructions
 
     @pytest.mark.parametrize(
         "model_name",
