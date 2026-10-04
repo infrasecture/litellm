@@ -15,6 +15,7 @@ import httpx
 from httpx._types import CookieTypes, QueryParamTypes, RequestContent, RequestFiles
 
 from litellm._logging import verbose_logger
+from litellm.exceptions import BadRequestError
 from litellm.litellm_core_utils.get_llm_provider_logic import get_llm_provider
 from litellm.litellm_core_utils.litellm_logging import Logging as LiteLLMLoggingObj
 from litellm.llms.base_llm.passthrough.transformation import BasePassthroughConfig, PassthroughStreamCollector
@@ -282,6 +283,7 @@ async def allm_passthrough_route(
     params: QueryParamTypes | None = None,
     cookies: CookieTypes | None = None,
     client: HTTPHandler | AsyncHTTPHandler | None = None,
+    required_custom_llm_provider: str | None = None,
     **kwargs,
 ) -> httpx.Response | AsyncGenerator[bytes, bytes]:
     """
@@ -297,6 +299,16 @@ async def allm_passthrough_route(
             api_base=api_base,
             api_key=api_key,
         )
+
+        if required_custom_llm_provider is not None and custom_llm_provider != required_custom_llm_provider:
+            raise BadRequestError(
+                message=(
+                    f"Passthrough route requires provider `{required_custom_llm_provider}`, "
+                    f"but model `{model}` resolves to `{custom_llm_provider}`"
+                ),
+                model=model,
+                llm_provider=custom_llm_provider,
+            )
 
         from litellm.types.utils import LlmProviders
         from litellm.utils import ProviderConfigManager
@@ -352,6 +364,8 @@ async def allm_passthrough_route(
         # For HTTP errors, re-raise as-is to preserve the original error details
         # The caller (e.g., proxy layer) can handle conversion to appropriate response format
         raise e
+    except BadRequestError:
+        raise
     except Exception as e:
         # For other exceptions, use provider-specific error handling
         from litellm.types.utils import LlmProviders

@@ -394,6 +394,7 @@ from litellm.proxy.bug_report_config import build_proxy_bug_report
 
 ## Import All Misc routes here ##
 from litellm.proxy.caching_routes import router as caching_router
+from litellm.proxy.chatgpt_endpoints.endpoints import router as chatgpt_router
 from litellm.proxy.common_request_processing import (
     KNOWN_PROXY_ROUTES,
     ProxyBaseLLMRequestProcessing,
@@ -20013,6 +20014,7 @@ async def get_routes():
 
 app.include_router(router)
 app.include_router(response_router)
+app.include_router(chatgpt_router)
 app.include_router(public_endpoints_router)
 app.include_router(public_v1_router)
 app.include_router(rerank_router)

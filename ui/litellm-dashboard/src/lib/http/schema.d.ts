@@ -939,6 +939,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/alpha/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Chatgpt Alpha Search */
+        post: operations["chatgpt_alpha_search_alpha_search_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/anthropic/{endpoint}": {
         parameters: {
             query?: never;
@@ -19566,6 +19583,23 @@ export interface paths {
          *     ```
          */
         post: operations["make_agent_public_v1_agents__agent_id__make_public_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/alpha/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Chatgpt Alpha Search */
+        post: operations["chatgpt_alpha_search_v1_alpha_search_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -52053,6 +52087,26 @@ export interface operations {
             };
         };
     };
+    chatgpt_alpha_search_alpha_search_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     anthropic_proxy_route_anthropic__endpoint__get: {
         parameters: {
             query?: never;
@@ -76943,6 +76997,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    chatgpt_alpha_search_v1_alpha_search_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };
