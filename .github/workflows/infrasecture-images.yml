@@ -33,7 +33,7 @@ jobs:
           version: "0.11.18"
       - name: Install test dependencies
         run: uv sync --frozen --no-install-project --extra proxy --extra extra_proxy --group dev
-      - name: Test adapters, search routing and passthrough regressions
+      - name: Test adapters, cache affinity, search routing and passthrough regressions
         run: >-
           uv run --no-sync pytest -q --tb=short
           tests/unit/llms/chatgpt tests/unit/proxy/chatgpt_endpoints
