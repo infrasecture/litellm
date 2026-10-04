@@ -6,11 +6,14 @@ Source: litellm/llms/chatgpt/responses/transformation.py
 
 import json
 from collections.abc import Generator
+from copy import deepcopy
+from pathlib import Path
 from typing import Final
 from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
+from pydantic import JsonValue
 
 import litellm
 from litellm.llms.chatgpt.responses.transformation import ChatGPTResponsesAPIConfig
@@ -233,6 +236,59 @@ class TestChatGPTResponsesAPITransformation:
             **cache_params,
         }
         assert headers == {"session_id": expected_session, "Authorization": "Bearer fixture"}
+
+    @pytest.mark.parametrize(
+        "text_config",
+        [
+            {
+                "format": {
+                    "type": "json_schema",
+                    "name": "answer",
+                    "description": "Preserve the caller's schema: zażółć",
+                    "strict": True,
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "items": {"type": "array", "items": {"type": "string"}},
+                            "note": {"type": ["string", "null"]},
+                        },
+                        "required": ["items", "note"],
+                        "additionalProperties": False,
+                    },
+                },
+                "verbosity": "low",
+            },
+            {"format": {"type": "json_object"}},
+            {"format": {"type": "text"}, "verbosity": "high"},
+            {"verbosity": "low"},
+            {},
+            None,
+        ],
+        ids=["json-schema", "json-object", "plain-text", "verbosity", "empty", "absent"],
+    )
+    def test_chatgpt_preserves_text_configuration(
+        self, text_config: dict[str, JsonValue] | None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("CHATGPT_TOKEN_DIR", str(tmp_path))
+        params: Final = {"text": text_config} if text_config is not None else {}
+        original: Final = deepcopy(params)
+        request: Final = ChatGPTResponsesAPIConfig().transform_responses_api_request(
+            model="chatgpt/test-model",
+            input=[{"role": "user", "content": "fixture"}],
+            response_api_optional_request_params=params,
+            litellm_params=GenericLiteLLMParams(),
+            headers={},
+        )
+
+        assert request == {
+            "model": "chatgpt/test-model",
+            "input": [{"role": "user", "content": "fixture"}],
+            "stream": True,
+            "store": False,
+            "include": ["reasoning.encrypted_content"],
+            **original,
+        }
+        assert params == original
 
     @pytest.mark.parametrize(
         "model_name",
