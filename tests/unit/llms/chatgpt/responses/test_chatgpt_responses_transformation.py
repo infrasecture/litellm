@@ -6,6 +6,7 @@ Source: litellm/llms/chatgpt/responses/transformation.py
 
 import json
 from collections.abc import Generator
+from typing import Final
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -162,6 +163,41 @@ class TestChatGPTResponsesAPITransformation:
 
         assert "instructions" in request
         assert request["instructions"] == instructions
+
+    @pytest.mark.parametrize(
+        ("cache_params", "expected_session"),
+        [
+            ({"prompt_cache_key": "thread-one"}, "thread-one"),
+            ({"prompt_cache_key": "thread-two"}, "thread-two"),
+            ({"prompt_cache_key": ""}, "fallback"),
+            ({"prompt_cache_key": None}, "fallback"),
+            ({"prompt_cache_key": 123}, "fallback"),
+            ({"prompt_cache_key": True}, "fallback"),
+            ({}, "fallback"),
+        ],
+    )
+    def test_chatgpt_preserves_prompt_cache_key_and_session_affinity(
+        self, cache_params: dict[str, str | int | None], expected_session: str
+    ) -> None:
+        config: Final = ChatGPTResponsesAPIConfig()
+        headers: Final = {"session_id": "fallback", "Authorization": "Bearer fixture"}
+        request: Final = config.transform_responses_api_request(
+            model="chatgpt/test-model",
+            input="hi",
+            response_api_optional_request_params=cache_params,
+            litellm_params=GenericLiteLLMParams(),
+            headers=headers,
+        )
+
+        assert request == {
+            "model": "chatgpt/test-model",
+            "input": "hi",
+            "stream": True,
+            "store": False,
+            "include": ["reasoning.encrypted_content"],
+            **cache_params,
+        }
+        assert headers == {"session_id": expected_session, "Authorization": "Bearer fixture"}
 
     @pytest.mark.parametrize(
         "model_name",

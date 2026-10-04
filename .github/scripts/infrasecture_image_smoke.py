@@ -8,6 +8,7 @@ import tempfile
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from itertools import product
 from pathlib import Path
 from typing import Final
 from urllib.error import HTTPError, URLError
@@ -96,18 +97,31 @@ def verify(port: int) -> None:
         assert upstream_headers["authorization"] == "Bearer fixture-provider-token"
         assert upstream_headers["originator"] == "codex_smoke"
         assert upstream_headers["session_id"] == "fixture-session"
-    for instructions in ("Caller-owned instructions", "", None):
-        payload: Final[dict[str, JsonValue]] = {"model": "search-model", "input": "fixture", "stream": True}
-        status, _, body = request(
-            port, "/v1/responses", {**payload, **({"instructions": instructions} if instructions is not None else {})}
-        )
+    for instructions, cache_key in product(
+        ("Caller-owned instructions.\nKeep whitespace. ", "", None),
+        ("thread-one", "thread-one", "thread-two", "", None),
+    ):
+        payload: Final[dict[str, JsonValue]] = {
+            "model": "search-model",
+            "input": "fixture",
+            "stream": True,
+            "extra_headers": {"session_id": "fixture-fallback"},
+            **({"instructions": instructions} if instructions is not None else {}),
+            **({"prompt_cache_key": cache_key} if cache_key is not None else {}),
+        }
+        status, _, body = request(port, "/v1/responses", payload)
         assert status == 200, (status, body)
         assert b"response.completed" in body, body
-        _, _, upstream_body = REQUESTS.get(timeout=5)
+        _, upstream_headers, upstream_body = REQUESTS.get(timeout=5)
         if instructions is None:
             assert "instructions" not in upstream_body, upstream_body
         else:
             assert upstream_body.get("instructions") == instructions, upstream_body
+        if cache_key is None:
+            assert "prompt_cache_key" not in upstream_body, upstream_body
+        else:
+            assert upstream_body.get("prompt_cache_key") == cache_key, upstream_body
+        assert upstream_headers["session_id"] == (cache_key or "fixture-fallback"), upstream_headers
     assert 400 <= request(port, "/v1/alpha/search", {"model": "search-model"}, "sk-wrong")[0] < 500
     assert request(port, "/v1/alpha/search", {"model": ""})[0] == 400
     assert request(port, "/v1/alpha/search", {"model": "other-provider"})[0] == 400
@@ -194,7 +208,7 @@ def main() -> None:
                         process.wait()
                     provider.shutdown()
     sys.stdout.write(
-        "PASS: real proxy HTTP, caller instructions, both search routes, OAuth headers, model routing and rejected requests\n"
+        "PASS: real proxy HTTP, caller instructions, cache affinity, search routes, OAuth headers and rejected requests\n"
     )
 
 

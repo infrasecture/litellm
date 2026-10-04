@@ -86,6 +86,10 @@ class ChatGPTResponsesAPIConfig(OpenAIResponsesAPIConfig):
             include.append("reasoning.encrypted_content")
         request["include"] = include
 
+        cache_key: Final[object] = request.get("prompt_cache_key")
+        if isinstance(cache_key, str) and cache_key:
+            headers["session_id"] = cache_key  # rebind-ok: the transport reads this shared mapping after transformation
+
         allowed_keys: Final = {
             "model",
             "input",
@@ -98,6 +102,7 @@ class ChatGPTResponsesAPIConfig(OpenAIResponsesAPIConfig):
             "reasoning",
             "previous_response_id",
             "truncation",
+            "prompt_cache_key",
         }
 
         return {k: v for k, v in request.items() if k in allowed_keys}
