@@ -135,10 +135,38 @@ def verify(port: int) -> None:
         assert upstream_headers["session_id"] == (cache_key or "fixture-fallback"), upstream_headers
         assert "text" not in upstream_body, upstream_body
     verify_output_formats(port)
+    verify_search_history(port)
     assert 400 <= request(port, "/v1/alpha/search", {"model": "search-model"}, "sk-wrong")[0] < 500
     assert request(port, "/v1/alpha/search", {"model": ""})[0] == 400
     assert request(port, "/v1/alpha/search", {"model": "other-provider"})[0] == 400
     assert REQUESTS.empty(), "Rejected requests reached the provider"
+
+
+def verify_search_history(port: int) -> None:
+    history: Final[list[JsonValue]] = [
+        {
+            "type": "web_search_call",
+            "id": "ws_fixture",
+            "status": "completed",
+            "action": {"type": "search", "query": "fixture"},
+        },
+        {"role": "user", "content": "Summarize the conversation"},
+    ]
+    for tools in ([], [{"type": "web_search", "search_context_size": "low"}]):
+        status, _, body = request(
+            port,
+            "/v1/responses",
+            {"model": "search-model", "input": history, "tools": tools, "stream": True},
+        )
+        assert status == 200, (status, body)
+        assert b"response.completed" in body, body
+        path, _, upstream_body = REQUESTS.get(timeout=5)
+        assert path == "/backend-api/codex/responses", path
+        assert upstream_body["input"] == history, upstream_body
+        assert upstream_body["tools"] == (tools or [{"type": "web_search", "external_web_access": False}]), (
+            upstream_body
+        )
+        assert upstream_body.get("tool_choice") == (None if tools else "none"), upstream_body
 
 
 def verify_output_formats(port: int) -> None:
@@ -266,7 +294,7 @@ def main() -> None:
                     provider.shutdown()
     sys.stdout.write(
         "PASS: real proxy HTTP, caller instructions, cache affinity, output formats, chat bridge, "
-        "search routes, OAuth headers and rejected requests\n"
+        "search history, search routes, OAuth headers and rejected requests\n"
     )
 
 

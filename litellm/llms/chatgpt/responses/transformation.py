@@ -2,6 +2,7 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Final
 
 import httpx
+from pydantic import JsonValue
 
 from litellm.exceptions import AuthenticationError
 from litellm.litellm_core_utils.core_helpers import process_response_headers
@@ -35,6 +36,25 @@ if TYPE_CHECKING:
     from litellm.litellm_core_utils.litellm_logging import Logging as LiteLLMLoggingObj
 
 _CHATGPT_SERVICE_TIERS: Final = {"default": "default", "priority": "priority", "fast": "priority"}
+
+
+def _with_web_search_history_tool(request: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    history: Final = request.get("input")
+    if not isinstance(history, list) or not any(
+        isinstance(item, dict) and item.get("type") == "web_search_call" for item in history
+    ):
+        return request
+    tools: Final = request.get("tools")
+    if tools is not None and not isinstance(tools, list):
+        return request
+    if any(isinstance(tool, dict) and str(tool.get("type", "")).startswith("web_search") for tool in tools or []):
+        return request
+    choice: Final = request.get("tool_choice")
+    return {
+        **request,
+        "tools": [*(tools or []), {"type": "web_search", "external_web_access": False}],
+        **({"tool_choice": "none"} if not tools and choice in (None, "auto", "none") else {}),
+    }
 
 
 class ChatGPTResponsesAPIConfig(OpenAIResponsesAPIConfig):
@@ -108,11 +128,11 @@ class ChatGPTResponsesAPIConfig(OpenAIResponsesAPIConfig):
             "text",
         }
 
-        filtered: Final = {k: v for k, v in request.items() if k in allowed_keys}
+        filtered: Final[dict[str, JsonValue]] = {k: v for k, v in request.items() if k in allowed_keys}
         service_tier: Final = _CHATGPT_SERVICE_TIERS.get(request.get("service_tier"))
         if service_tier is not None:
             filtered["service_tier"] = service_tier
-        return filtered
+        return _with_web_search_history_tool(filtered)
 
     def transform_response_api_response(
         self,
