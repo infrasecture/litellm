@@ -80,6 +80,8 @@ jobs:
             org.opencontainers.image.source=https://github.com/infrasecture/litellm
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=${{ github.ref_name }}-${{ matrix.arch }}
+      - name: Verify PgBouncer with the packaged runtime libraries
+        run: docker run --rm --network none --entrypoint pgbouncer litellm:smoke --version
       - name: Verify the packaged proxy without external network access
         run: >-
           docker run --rm --network none
