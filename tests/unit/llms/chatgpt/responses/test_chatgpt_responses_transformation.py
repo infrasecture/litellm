@@ -35,6 +35,117 @@ def local_model_cost_map(monkeypatch: pytest.MonkeyPatch) -> Generator[None, Non
 
 class TestChatGPTResponsesAPITransformation:
     @pytest.mark.parametrize(
+        ("tool_params", "expected_params"),
+        [
+            ({}, {"tool_choice": "none"}),
+            ({"tools": None}, {"tool_choice": "none"}),
+            ({"tools": []}, {"tool_choice": "none"}),
+            ({"tools": [], "tool_choice": None}, {"tool_choice": "none"}),
+            ({"tools": [], "tool_choice": "auto"}, {"tool_choice": "none"}),
+            ({"tools": [], "tool_choice": "none"}, {"tool_choice": "none"}),
+            ({"tools": [], "tool_choice": "required"}, {"tool_choice": "required"}),
+            (
+                {"tools": [{"type": "function", "name": "read_file", "parameters": {"type": "object"}}]},
+                {},
+            ),
+            (
+                {
+                    "tools": [{"type": "function", "name": "read_file", "parameters": {"type": "object"}}],
+                    "tool_choice": {"type": "function", "name": "read_file"},
+                },
+                {"tool_choice": {"type": "function", "name": "read_file"}},
+            ),
+        ],
+    )
+    def test_search_history_declares_tool_without_changing_existing_tool_choice(
+        self, tool_params: dict[str, JsonValue], expected_params: dict[str, JsonValue]
+    ) -> None:
+        history: Final = [
+            {
+                "type": "web_search_call",
+                "id": "ws_history",
+                "status": "completed",
+                "action": {"type": "search", "query": "previous search"},
+            },
+            {"role": "user", "content": "Summarize the conversation"},
+        ]
+        original_history: Final = deepcopy(history)
+        original_params: Final = deepcopy(tool_params)
+        config: Final = ChatGPTResponsesAPIConfig()
+        request: Final = config.transform_responses_api_request(
+            model="chatgpt/test-model",
+            input=history,
+            response_api_optional_request_params=tool_params,
+            litellm_params=GenericLiteLLMParams(),
+            headers={},
+        )
+        assert request == {
+            "model": "chatgpt/test-model",
+            "input": original_history,
+            "stream": True,
+            "store": False,
+            "include": ["reasoning.encrypted_content"],
+            "tools": [*(tool_params.get("tools") or []), {"type": "web_search", "external_web_access": False}],
+            **expected_params,
+        }
+        assert history == original_history
+        assert tool_params == original_params
+        assert (
+            config.transform_responses_api_request(
+                model="chatgpt/test-model",
+                input=request["input"],
+                response_api_optional_request_params={
+                    key: value for key, value in request.items() if key not in ("input", "model")
+                },
+                litellm_params=GenericLiteLLMParams(),
+                headers={},
+            )
+            == request
+        )
+
+    @pytest.mark.parametrize("tool_type", ["web_search", "web_search_preview", "web_search_preview_2025_03_11"])
+    def test_search_history_preserves_existing_search_configuration(self, tool_type: str) -> None:
+        history: Final = [{"type": "web_search_call", "id": "ws_history", "status": "completed"}]
+        tools: Final = [{"type": tool_type, "search_context_size": "low"}]
+        request: Final = ChatGPTResponsesAPIConfig().transform_responses_api_request(
+            model="chatgpt/test-model",
+            input=history,
+            response_api_optional_request_params={"tools": tools, "tool_choice": "auto"},
+            litellm_params=GenericLiteLLMParams(),
+            headers={},
+        )
+        assert request == {
+            "model": "chatgpt/test-model",
+            "input": history,
+            "stream": True,
+            "store": False,
+            "include": ["reasoning.encrypted_content"],
+            "tools": tools,
+            "tool_choice": "auto",
+        }
+
+    @pytest.mark.parametrize(
+        "history",
+        ["web_search_call", [], [{"role": "user", "content": "web_search_call"}]],
+    )
+    def test_requests_without_search_history_keep_tools_disabled(self, history: str | list[dict[str, str]]) -> None:
+        request: Final = ChatGPTResponsesAPIConfig().transform_responses_api_request(
+            model="chatgpt/test-model",
+            input=history,
+            response_api_optional_request_params={"tools": []},
+            litellm_params=GenericLiteLLMParams(),
+            headers={},
+        )
+        assert request == {
+            "model": "chatgpt/test-model",
+            "input": history,
+            "stream": True,
+            "store": False,
+            "include": ["reasoning.encrypted_content"],
+            "tools": [],
+        }
+
+    @pytest.mark.parametrize(
         "model_name",
         [
             "chatgpt/gpt-5.5",
